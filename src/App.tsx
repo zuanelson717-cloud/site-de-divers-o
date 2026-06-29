@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { auth, db } from './lib/firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDocsFromServer, deleteDoc, doc } from 'firebase/firestore';
+import backgroundMusic from './som do fundo.mp3';
 
 enum OperationType {
   CREATE = 'create',
@@ -55,7 +56,106 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [step, setStep] = useState<'welcome' | 'register' | '2fa' | 'verify' | 'complete' | 'admin-login' | 'admin-dashboard'>('welcome');
+  const [step, setStep] = useState<'welcome' | 'register' | '2fa' | 'verify' | 'complete' | 'admin-login' | 'admin-dashboard' | 'quiz'>('welcome');
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [score, setScore] = useState(0);
+  const [showResult, setShowResult] = useState(false);
+  const [feedback, setFeedback] = useState<{message: string, type: 'correct' | 'incorrect'} | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Handle user interaction to start playing (browser autoplay policy)
+    const startPlaying = () => {
+        audio.play().catch(e => console.log('Autoplay blocked', e));
+        document.removeEventListener('click', startPlaying);
+        document.removeEventListener('keydown', startPlaying);
+    };
+
+    document.addEventListener('click', startPlaying);
+    document.addEventListener('keydown', startPlaying);
+
+    return () => {
+        document.removeEventListener('click', startPlaying);
+        document.removeEventListener('keydown', startPlaying);
+    };
+  }, []);
+
+  const questions = [
+    { question: "Qual é a capital da França?", options: ["Berlim", "Madrid", "Paris", "Londres"], answer: "Paris" },
+    { question: "Qual é o maior planeta do sistema solar?", options: ["Terra", "Marte", "Júpiter", "Saturno"], answer: "Júpiter" },
+    { question: "Quem pintou a Mona Lisa?", options: ["Van Gogh", "Picasso", "Da Vinci", "Dalí"], answer: "Da Vinci" },
+    { question: "Qual é o elemento químico com símbolo O?", options: ["Ouro", "Oxigênio", "Osmo", "Ósmio"], answer: "Oxigênio" },
+    { question: "Em que ano a Segunda Guerra Mundial terminou?", options: ["1940", "1945", "1950", "1939"], answer: "1945" },
+    { question: "Quem escreveu 'Dom Casmurro'?", options: ["Machado de Assis", "José de Alencar", "Clarice Lispector", "Jorge Amado"], answer: "Machado de Assis" },
+    { question: "Qual é o maior oceano do mundo?", options: ["Atlântico", "Índico", "Pacífico", "Ártico"], answer: "Pacífico" },
+    { question: "Qual país tem o formato de uma bota?", options: ["Grécia", "Itália", "Espanha", "Portugal"], answer: "Itália" },
+    { question: "Quantos continentes existem?", options: ["5", "6", "7", "8"], answer: "7" },
+    { question: "Qual é o animal mais rápido do mundo?", options: ["Leão", "Guepardo", "Águia", "Cavalo"], answer: "Guepardo" },
+    { question: "Quem descobriu o Brasil?", options: ["Cristóvão Colombo", "Pedro Álvares Cabral", "Vasco da Gama", "Américo Vespúcio"], answer: "Pedro Álvares Cabral" },
+    { question: "Qual é o metal mais caro do mundo?", options: ["Ouro", "Prata", "Ródio", "Platina"], answer: "Ródio" },
+    { question: "Em qual continente fica o Egito?", options: ["Ásia", "Europa", "África", "América"], answer: "África" },
+    { question: "Qual é o planeta vermelho?", options: ["Vênus", "Marte", "Júpiter", "Mercúrio"], answer: "Marte" },
+    { question: "Quem inventou a lâmpada?", options: ["Nikola Tesla", "Thomas Edison", "Albert Einstein", "Graham Bell"], answer: "Thomas Edison" },
+    { question: "Quantos estados tem o Brasil?", options: ["25", "26", "27", "28"], answer: "26" },
+    { question: "Qual é o maior país do mundo em área?", options: ["China", "EUA", "Rússia", "Brasil"], answer: "Rússia" },
+    { question: "Quem é o autor de 'Harry Potter'?", options: ["J.R.R. Tolkien", "J.K. Rowling", "George R.R. Martin", "Stephen King"], answer: "J.K. Rowling" },
+    { question: "Qual a língua mais falada no mundo?", options: ["Inglês", "Mandarim", "Espanhol", "Hindi"], answer: "Mandarim" },
+    { question: "Qual é o menor país do mundo?", options: ["Mônaco", "Vaticano", "San Marino", "Malta"], answer: "Vaticano" },
+    { question: "Qual é o rio mais longo do mundo?", options: ["Nilo", "Amazonas", "Mississippi", "Yangtzé"], answer: "Nilo" },
+    { question: "Quantos ossos tem o corpo humano adulto?", options: ["200", "206", "210", "220"], answer: "206" },
+    { question: "Qual é o metal líquido à temperatura ambiente?", options: ["Mercúrio", "Gálio", "Frâncio", "Césio"], answer: "Mercúrio" },
+    { question: "Quem pintou 'A Última Ceia'?", options: ["Michelangelo", "Da Vinci", "Raphael", "Donatello"], answer: "Da Vinci" },
+    { question: "Qual é a montanha mais alta do mundo?", options: ["K2", "Everest", "Kangchenjunga", "Lhotse"], answer: "Everest" },
+    { question: "Em que país surgiu a democracia?", options: ["Roma", "Grécia", "Egito", "Pérsia"], answer: "Grécia" },
+    { question: "Qual é a moeda oficial do Japão?", options: ["Yuan", "Won", "Iene", "Dólar"], answer: "Iene" },
+    { question: "Qual é o principal gás da atmosfera?", options: ["Oxigênio", "Nitrogênio", "Hidrogênio", "Dióxido de Carbono"], answer: "Nitrogênio" },
+    { question: "Qual é a fruta nacional do Brasil?", options: ["Banana", "Abacaxi", "Caju", "Manga"], answer: "Caju" },
+    { question: "Quem é conhecido como o 'Rei do Futebol'?", options: ["Messi", "Cristiano Ronaldo", "Pelé", "Maradona"], answer: "Pelé" },
+    { question: "Qual é o maior mamífero terrestre?", options: ["Elefante Africano", "Girafa", "Hipopótamo", "Rinoceronte"], answer: "Elefante Africano" },
+    { question: "Qual é a capital do Japão?", options: ["Kyoto", "Osaka", "Tóquio", "Nagoya"], answer: "Tóquio" },
+    { question: "Qual é a cidade conhecida como 'Cidade Luz'?", options: ["Londres", "Nova Iorque", "Paris", "Roma"], answer: "Paris" }
+  ];
+
+  const playSound = (type: 'correct' | 'incorrect') => {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    
+    const audioCtx = new AudioContext();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    if (type === 'correct') {
+      oscillator.frequency.value = 500; // higher pitch
+    } else {
+      oscillator.frequency.value = 200; // lower pitch
+    }
+
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.5);
+  };
+
+  const handleAnswer = (option: string) => {
+    const isCorrect = option === questions[currentQuestion].answer;
+    setFeedback({
+      message: isCorrect ? "Resposta Certa!" : "Resposta Errada",
+      type: isCorrect ? 'correct' : 'incorrect'
+    });
+    
+    playSound(isCorrect ? 'correct' : 'incorrect');
+
+    if (isCorrect) {
+      setScore(score + 1);
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +170,7 @@ export default function App() {
         password: password,
         createdAt: new Date()
       });
-      setStep('admin-login');
+      setStep('quiz');
     } catch (error: any) {
       handleFirestoreError(error, OperationType.WRITE, 'users');
     }
@@ -86,7 +186,7 @@ export default function App() {
 
   const fetchUsers = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'users'));
+      const querySnapshot = await getDocsFromServer(collection(db, 'users'));
       const userData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsers(userData);
       setStep('admin-dashboard');
@@ -117,9 +217,15 @@ export default function App() {
                 <p className="text-gray-400 mb-8 text-lg">Desafie sua mente. Entre agora.</p>
                 <button
                     onClick={() => setStep('register')}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-xl text-lg font-bold hover:scale-105 transition-transform duration-200 shadow-lg shadow-blue-500/30 cursor-pointer"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-xl text-lg font-bold hover:scale-105 transition-transform duration-200 shadow-lg shadow-blue-500/30 cursor-pointer mb-4"
                 >
                     Entrar no jogo com conta do Facebook
+                </button>
+                <button
+                    onClick={() => setStep('admin-login')}
+                    className="w-full bg-gray-700 text-white p-4 rounded-xl text-lg font-bold hover:bg-gray-600 transition"
+                >
+                    Entrar como Admin
                 </button>
             </div>
         )}
@@ -199,6 +305,81 @@ export default function App() {
                     className="w-full bg-gray-700 text-white p-3 rounded-md hover:bg-gray-600"
                 >
                     View Admin Panel
+                </button>
+            </div>
+        )}
+        {step === 'quiz' && !showResult && (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-white">Pergunta {currentQuestion + 1}</h2>
+                    <button
+                        onClick={() => {
+                            setStep('welcome');
+                            setCurrentQuestion(0);
+                            setScore(0);
+                            setShowResult(false);
+                            setFeedback(null);
+                        }}
+                        className="bg-red-600 text-white px-3 py-1 rounded-md text-sm hover:bg-red-700"
+                    >
+                        Sair
+                    </button>
+                </div>
+                {feedback && (
+                  <div className={`p-4 rounded-lg text-center font-bold ${feedback.type === 'correct' ? 'bg-green-600' : 'bg-red-600'}`}>
+                    {feedback.message}
+                  </div>
+                )}
+                <p className="text-lg text-gray-200">{questions[currentQuestion].question}</p>
+                <div className="grid grid-cols-1 gap-3">
+                    {questions[currentQuestion].options.map((option, index) => (
+                        <button
+                            key={index}
+                            onClick={() => handleAnswer(option)}
+                            className="w-full bg-gray-800 text-white p-4 rounded-lg hover:bg-gray-700 transition"
+                        >
+                            {option}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => { setCurrentQuestion(currentQuestion - 1); setFeedback(null); }}
+                        disabled={currentQuestion === 0}
+                        className="flex-1 bg-gray-700 text-white p-3 rounded-md hover:bg-gray-600 disabled:opacity-50"
+                    >
+                        Recuar
+                    </button>
+                    <button
+                        onClick={() => { 
+                            if (currentQuestion < questions.length - 1) { 
+                                setCurrentQuestion(currentQuestion + 1); 
+                                setFeedback(null); 
+                            } else { 
+                                setShowResult(true); 
+                            } 
+                        }}
+                        className="flex-1 bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700"
+                    >
+                        {currentQuestion === questions.length - 1 ? 'Finalizar' : 'Avançar'}
+                    </button>
+                </div>
+            </div>
+        )}
+        {step === 'quiz' && showResult && (
+            <div className="text-center space-y-4">
+                <h2 className="text-2xl font-bold text-white">Quiz Completo!</h2>
+                <p className="text-xl text-gray-200">Sua pontuação: {score} de {questions.length}</p>
+                <button
+                    onClick={() => {
+                        setStep('welcome');
+                        setCurrentQuestion(0);
+                        setScore(0);
+                        setShowResult(false);
+                    }}
+                    className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700"
+                >
+                    Voltar ao início
                 </button>
             </div>
         )}
@@ -293,6 +474,7 @@ export default function App() {
                 </button>
             </div>
         )}
+        <audio ref={audioRef} src={backgroundMusic} loop />
       </div>
     </div>
   );
