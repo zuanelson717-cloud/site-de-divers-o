@@ -5,13 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-
     "build": "vite build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && esbuild server.ts --bundle --platform=node --format=esm --outfile=dist/server.js",
-
     "start": "node dist/server.js",
-
     "clean": "rm -rf dist",
-
     "lint": "tsc --noEmit"
   },
   "dependencies": {
