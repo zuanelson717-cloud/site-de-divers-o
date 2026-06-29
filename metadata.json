@@ -1,0 +1,6 @@
+{
+  "name": "Email Registration System",
+  "description": "A secure user registration flow featuring 2FA and identity verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,20 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account info",
+      "type": "object",
+      "properties": {
+        "credential": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["credential", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores user credentials and creation time"
+    }
+  }
+}
